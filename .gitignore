@@ -1,0 +1,38 @@
+# Nebflix's local catalogue, videos, generated stills, and converted audio
+/library/
+/data/
+/media/
+
+# Video and audio files, wherever they are placed in this project
+*.3gp
+*.aac
+*.ac3
+*.aiff
+*.avi
+*.flac
+*.m4a
+*.mkv
+*.mov
+*.mp3
+*.mp4
+*.mpeg
+*.mpg
+*.ogg
+*.opus
+*.m2ts
+*.wav
+*.webm
+*.wma
+*.wmv
+
+# Generated/runtime files
+node_modules/
+npm-debug.log*
+*.log
+
+# Local editor and operating system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini

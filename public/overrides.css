@@ -1,0 +1,3 @@
+.shelf h2 .row-delete{margin-left:auto;border:0;background:transparent;color:#999;font:500 10px var(--font);cursor:pointer;opacity:0;transition:opacity .15s}
+.shelf:hover h2 .row-delete,.shelf h2 .row-delete:focus{opacity:1}
+.shelf h2 .row-delete:hover{color:#fff}

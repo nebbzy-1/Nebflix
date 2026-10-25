@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#101010"><title>Nebflix</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/overrides.css">
+</head>
+<body>
+  <div class="ambient"></div>
+  <header class="topbar">
+    <a class="brand" href="/"><span class="brand-mark">N</span><span>NEBFLIX</span></a>
+    <nav class="nav"><a class="active" href="#home">Home</a><a href="#library">My Library</a></nav>
+    <div class="top-actions"><div class="searchbox"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7.2"/><path d="m16.5 16.5 4 4"/></svg><input id="search" placeholder="Search your library" aria-label="Search your library"></div><button class="avatar" title="Your profile">N</button></div>
+  </header>
+  <main id="home">
+    <section class="hero" id="hero">
+      <div class="hero-image" id="heroImage"></div><div class="hero-shade"></div>
+      <div class="hero-content"><div class="eyebrow"><span class="spark">✦</span> YOUR PERSONAL CINEMA</div><div class="hero-title" id="heroTitle"><span class="brand-mini">N</span> NEBFLIX</div><p class="hero-copy" id="heroCopy">Your favourites, all in one place. Start building a library that feels like yours.</p>
+        <div class="hero-buttons"><button class="button primary" id="heroPlay"><span>▶</span> Play something</button><button class="button secondary" id="browseButton"><span>ⓘ</span> Browse library</button></div>
+        <div class="hero-note"><span class="status-dot"></span> YOUR LIBRARY · <span id="heroCount">READY WHEN YOU ARE</span></div>
+      </div><div class="hero-index"><span>01</span><i></i> 01</div>
+    </section>
+
+    <section class="library-section" id="library">
+      <div class="section-top"><div><div class="eyebrow section-eyebrow">THE GOOD STUFF</div><div class="section-title">Your library <span class="count-badge" id="countBadge">0</span></div></div><div class="sort-wrap"><span>Sort by</span><select id="sort"><option value="recent">Recently added</option><option value="title">Title A–Z</option><option value="progress">Continue watching</option></select><svg viewBox="0 0 20 20"><path d="m5 7 5 5 5-5"/></svg></div></div>
+      <div class="filterbar"><button class="filter active" data-filter="all">All titles</button><button class="filter" data-filter="continue">Continue watching</button><button class="filter" data-filter="unwatched">Unwatched</button><span class="library-divider"></span><span class="library-caption" id="libraryCaption">A little room for your next favourite.</span></div>
+      <div id="shelves" class="shelves"></div>
+      <div id="emptyState" class="empty-state"><div class="empty-art"><div class="empty-frame"><span>✦</span></div><div class="empty-spark s1">✦</div><div class="empty-spark s2">✦</div><div class="empty-spark s3">✧</div></div><h2>Your next favourite is waiting.</h2><p>Bring your video collection together and make this space yours.</p><div class="empty-actions"><button class="button primary" id="emptyImport"><span>＋</span> Add a series</button><button class="text-button" id="emptyUpload">Upload episodes</button></div><div class="format-note">Your videos stay on this device. Always.</div></div>
+    </section>
+    <section class="storage-strip"><span class="storage-icon">◉</span><div><strong>Your private cinema</strong><span>Your library lives right here on your computer.</span></div><span class="storage-lock">⌑ LOCAL & PRIVATE</span></section>
+    <footer><span class="footer-brand">NEBFLIX</span><span>Made for your movie nights.</span><span id="footerStats">LOCAL LIBRARY</span></footer>
+  </main>
+
+  <div class="add-fab" id="addFab"><button class="fab-main" aria-label="Add videos">＋</button><div class="fab-menu"><button id="fabImport"><span>▣</span> Import a folder</button><button id="fabUpload"><span>↑</span> Upload episodes</button></div></div>
+  <input hidden id="filePicker" type="file" accept="video/*,.mkv,.avi,.wmv,.ts,.mpg,.mpeg" multiple>
+
+  <div class="modal-backdrop" id="importModal"><div class="modal"><button class="modal-close" data-close>×</button><div class="modal-eyebrow">MAKE IT YOURS</div><h2>Bring your series in.</h2><p class="modal-copy">Choose the season folder on your computer. We’ll add the episodes to your Nebflix library and keep a copy here.</p><label class="field-label" for="folderPath">Folder location</label><div class="path-input"><span>▣</span><input id="folderPath" placeholder="C:\Users\you\Videos\My Series" spellcheck="false"></div><p class="field-hint">Paste a folder path from File Explorer. For example, C:\Users\you\Videos\My Series</p><div id="importError" class="error-text"></div><div class="modal-actions"><button class="button secondary" data-close>Cancel</button><button class="button primary" id="importGo">Import folder <span>→</span></button></div></div></div>
+  <div class="modal-backdrop" id="uploadModal"><div class="modal"><button class="modal-close" data-close>×</button><div class="modal-eyebrow">ADD TO YOUR COLLECTION</div><h2>Upload your episodes.</h2><p class="modal-copy">Choose one or more video files and give their series a home.</p><label class="field-label" for="showName">Series name</label><input class="text-input" id="showName" placeholder="e.g. Billions"><label class="field-label spaced" for="filePicker">Episodes</label><button class="dropzone" id="chooseFiles"><span class="upload-icon">↑</span><strong>Choose video files</strong><span>MP4, MKV, MOV, WebM and more</span></button><div id="selectedFiles" class="selected-files"></div><div class="upload-progress" id="uploadProgress"></div><div id="uploadError" class="error-text"></div><div class="modal-actions"><button class="button secondary" data-close>Cancel</button><button class="button primary" id="uploadGo">Add to library <span>→</span></button></div></div></div>
+  <div class="player-backdrop" id="player"><div class="player-shell"><button class="player-close" id="playerClose">×</button><video id="video" controls playsinline></video><audio id="audioTrack" preload="none"></audio><div class="player-info"><div class="player-series" id="playerSeries"></div><div class="player-title" id="playerTitle"></div><div class="episode-nav"><button id="prevEp">← Previous</button><button id="nextEp">Next episode →</button></div><div class="player-tools"><div class="volume-control"><button id="volumeToggle" aria-label="Mute audio">◖))</button><input id="volumeSlider" type="range" min="0" max="1" step="0.01" value="0.8" aria-label="Volume"><span id="volumeLabel">80%</span></div><span class="playback-error" id="playbackError"></span></div></div></div></div>
+  <div id="toast" class="toast"></div>
+  <script src="/app.js"></script>
+</body></html>
