@@ -10,8 +10,15 @@ const savedVolume = localStorage.getItem('nebflix-volume');
 const initialVolume = savedVolume === null ? 0.8 : Number(savedVolume);
 video.volume = Number.isFinite(initialVolume) && initialVolume > 0 && initialVolume <= 1 ? initialVolume : 0.8;
 video.muted = false;
+let lastAudibleVolume = Number(localStorage.getItem('nebflix-last-audible-volume'));
+if (!Number.isFinite(lastAudibleVolume) || lastAudibleVolume <= 0 || lastAudibleVolume > 1) lastAudibleVolume = video.volume;
 video.addEventListener('volumechange', () => {
   localStorage.setItem('nebflix-volume', String(video.volume));
+  if (video.volume > 0) {
+    lastAudibleVolume = video.volume;
+    localStorage.setItem('nebflix-last-audible-volume', String(video.volume));
+  }
+  updateAudioVolumeUi();
   if (audioBridgeActive) {
     audioBridge.volume = video.volume;
     audioBridge.muted = video.muted;
@@ -20,6 +27,15 @@ video.addEventListener('volumechange', () => {
 });
 let activeEpisode = null, lastServerProgressSave = 0;
 
+function updateAudioVolumeUi() {
+  const muted = video.muted || video.volume === 0;
+  const toggle = $('#volumeToggle');
+  toggle.textContent = muted ? '◖×' : '◖))';
+  toggle.setAttribute('aria-label', muted ? 'Unmute audio' : 'Mute audio');
+  toggle.title = muted ? 'Unmute audio' : 'Mute audio';
+  $('#volumeSlider').value = String(video.volume);
+  $('#volumeLabel').textContent = `${Math.round(video.volume * 100)}%`;
+}
 function stopAudioBridge() {
   audioBridgeGeneration++;
   audioBridgeActive = false;
@@ -104,6 +120,9 @@ video.addEventListener('timeupdate', () => syncAudioBridge());
 video.addEventListener('ratechange', () => { if (audioBridgeActive) audioBridge.playbackRate = video.playbackRate; });
 audioBridge.addEventListener('playing', () => { $('#playbackError').textContent = ''; $('#enableAudio').hidden = true; });
 $('#enableAudio').onclick=()=>audioBridge.play().then(()=>{ $('#playbackError').textContent=''; $('#enableAudio').hidden=true; }).catch(()=>{});
+$('#volumeSlider').addEventListener('input',()=>{const volume=Number($('#volumeSlider').value);video.volume=volume;video.muted=volume===0;if(volume>0){lastAudibleVolume=volume;localStorage.setItem('nebflix-last-audible-volume',String(volume));}updateAudioVolumeUi();});
+$('#volumeToggle').onclick=()=>{if(video.muted||video.volume===0){video.volume=lastAudibleVolume;video.muted=false;}else video.muted=true;updateAudioVolumeUi();};
+updateAudioVolumeUi();
 
 function saveProgress(){localStorage.setItem('nebflix-progress',JSON.stringify(progress));}
 function notify(message){const toast=$('#toast');toast.textContent=message;toast.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('show'),2600);}

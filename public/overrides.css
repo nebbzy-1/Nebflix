@@ -35,3 +35,10 @@
 @media(max-width:620px){.folder-picker-row{align-items:stretch}.browse-folder{padding:0 11px}.collection-card{flex-basis:42vw;max-width:190px}.carousel-arrow{width:32px;height:32px;font-size:25px}.hero-index{right:17px;bottom:26px;gap:7px}.hero-index button{width:33px;height:33px;font-size:23px}.episode-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}}
 .player-tools #enableAudio{height:29px;padding:0 10px;border:1px solid #777;border-radius:3px;background:#292929;color:#fff;font:500 10px var(--font);cursor:pointer}
 .player-tools #enableAudio:hover{background:#3b3b3b}
+.player-tools .playback-error{flex:1;min-width:0}
+.player-tools .volume-control{flex:none;gap:7px}
+.player-tools .volume-control button{width:34px;border:1px solid #484848;border-radius:3px;background:#202020;font-size:13px}
+.player-tools .volume-control button:hover,.player-tools .volume-control button:focus-visible{background:#353535;outline:1px solid #888}
+.player-tools #volumeSlider{accent-color:#ccc}
+.player-tools #volumeLabel{font-variant-numeric:tabular-nums}
+@media(max-width:620px){.player-tools{gap:10px}.player-tools .playback-error{flex-basis:100%}.player-tools .volume-control{margin-left:auto}}
