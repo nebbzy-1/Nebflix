@@ -1,16 +1,18 @@
-﻿const $ = s => document.querySelector(s);
+const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const progress = JSON.parse(localStorage.getItem('nebflix-progress') || '{}');
 let library = {shows:[]}, filter='all', activeEpisodes=[], activeIndex=0, toastTimer;
 const video = $('#video');
 const savedVolume = localStorage.getItem('nebflix-volume');
-const initialVolume = savedVolume === null || savedVolume === '0' ? 0.8 : Number(savedVolume);
+const initialVolume = savedVolume === null ? 0.8 : Number(savedVolume);
 video.volume = Number.isFinite(initialVolume) && initialVolume >= 0 && initialVolume <= 1 ? initialVolume : 0.8;
-let lastAudibleVolume = video.volume || 0.8;
+video.muted = localStorage.getItem('nebflix-muted') === 'true';
+video.addEventListener('volumechange', () => {
+  localStorage.setItem('nebflix-volume', String(video.volume));
+  localStorage.setItem('nebflix-muted', String(video.muted));
+});
 let activeEpisode = null, lastServerProgressSave = 0;
-$('#volumeSlider').value = video.volume;
-$('#volumeLabel').textContent = `${Math.round(video.volume*100)}%`;
 
 function saveProgress(){localStorage.setItem('nebflix-progress',JSON.stringify(progress));}
 function notify(message){const toast=$('#toast');toast.textContent=message;toast.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('show'),2600);}
@@ -56,7 +58,6 @@ async function openEpisode(ep) {
   $('#playerSeries').textContent = (library.shows.find(s => s.episodes.some(e => e.id === ep.id))?.title || 'NEBFLIX').toUpperCase();
   $('#playerTitle').textContent = ep.title;
   $('#player').classList.add('open');
-  video.volume = Number($('#volumeSlider').value);
   video.src = ep.url;
   video.onloadedmetadata = () => {
     const p = progress[ep.id];
@@ -113,8 +114,7 @@ $('#importGo').onclick=async()=>{const button=$('#importGo'),path=$('#folderPath
 $('#chooseFiles').onclick=()=>$('#filePicker').click();$('#filePicker').onchange=()=>{$('#selectedFiles').textContent=[...$('#filePicker').files].map(f=>f.name).join(' · ');};
 $('#uploadGo').onclick=async()=>{const files=[...$('#filePicker').files],name=$('#showName').value.trim()||'My uploads';$('#uploadError').textContent='';if(!files.length){$('#uploadError').textContent='Choose at least one video file first.';return;}const button=$('#uploadGo');button.disabled=true;try{for(let i=0;i<files.length;i++){const f=files[i];$('#uploadProgress').textContent=`Adding ${i+1} of ${files.length} · ${f.name}`;const r=await fetch(`/api/upload?show=${encodeURIComponent(name)}&name=${encodeURIComponent(f.name)}`,{method:'POST',headers:{'Content-Type':f.type||'application/octet-stream'},body:f});const data=await r.json();if(!r.ok)throw Error(data.error);library=data.library;}render();generateStills();closeModals();$('#filePicker').value='';$('#selectedFiles').textContent='';$('#uploadProgress').textContent='';notify(`${files.length} episode${files.length===1?'':'s'} added.`);}catch(e){$('#uploadError').textContent=e.message;}finally{button.disabled=false;}};
 $('#playerClose').onclick=closePlayer;$('#player').addEventListener('click',e=>{if(e.target===$('#player'))closePlayer();});$('#prevEp').onclick=()=>{if(activeIndex>0){activeIndex--;openEpisode(activeEpisodes[activeIndex]);}};$('#nextEp').onclick=()=>{if(activeIndex<activeEpisodes.length-1){activeIndex++;openEpisode(activeEpisodes[activeIndex]);}};$('#heroPlay').onclick=()=>{if(library.shows.length)playShow(library.shows[0]);};
-function updateVolumeControls(){const output=video;$('#volumeSlider').value=output.volume;$('#volumeLabel').textContent=`${Math.round(output.volume*100)}%`;$('#volumeToggle').textContent=output.muted||output.volume===0?'\u25A0\u00D7':'\u25A0))';if(output.volume>0)lastAudibleVolume=output.volume;}
-$('#volumeSlider').oninput=()=>{const value=Number($('#volumeSlider').value);video.volume=value;video.muted=value===0;if(value>0)lastAudibleVolume=value;localStorage.setItem('nebflix-volume',String(value));updateVolumeControls();};video.onvolumechange=updateVolumeControls;$('#volumeToggle').onclick=()=>{if(video.muted||video.volume===0){video.muted=false;video.volume=lastAudibleVolume;$('#volumeSlider').value=lastAudibleVolume;}else video.muted=true;updateVolumeControls();};$('#search').oninput=render;$('#sort').onchange=render;$$('.filter').forEach(b=>b.onclick=()=>{$$('.filter').forEach(x=>x.classList.remove('active'));b.classList.add('active');filter=b.dataset.filter;render();});document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModals();if($('#player').classList.contains('open'))closePlayer();$('#addFab').classList.remove('open');}});
+$('#search').oninput=render;$('#sort').onchange=render;$$('.filter').forEach(b=>b.onclick=()=>{$$('.filter').forEach(x=>x.classList.remove('active'));b.classList.add('active');filter=b.dataset.filter;render();});document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModals();if($('#player').classList.contains('open'))closePlayer();$('#addFab').classList.remove('open');}});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&activeEpisode)persistEpisode(activeEpisode,false,true);});window.addEventListener('pagehide',()=>{if(activeEpisode)persistEpisode(activeEpisode,false,true);});
 loadLibrary().catch(()=>notify('Nebflix could not connect to its local library.'));
 
