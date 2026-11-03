@@ -16,10 +16,10 @@
   <main id="home">
     <section class="hero" id="hero">
       <div class="hero-image" id="heroImage"></div><div class="hero-shade"></div>
-      <div class="hero-content"><div class="eyebrow"><span class="spark">✦</span> YOUR PERSONAL CINEMA</div><div class="hero-title" id="heroTitle"><span class="brand-mini">N</span> NEBFLIX</div><p class="hero-copy" id="heroCopy">Your favourites, all in one place. Start building a library that feels like yours.</p>
+      <div class="hero-content"><div class="hero-title" id="heroTitle">Your next<br>great watch.</div><p class="hero-copy" id="heroCopy">Your favourites, all in one place. Start building a library that feels like yours.</p>
         <div class="hero-buttons"><button class="button primary" id="heroPlay"><span>▶</span> Play something</button><button class="button secondary" id="browseButton"><span>ⓘ</span> Browse library</button></div>
         <div class="hero-note"><span class="status-dot"></span> YOUR LIBRARY · <span id="heroCount">READY WHEN YOU ARE</span></div>
-      </div><div class="hero-index"><span>01</span><i></i> 01</div>
+      </div><div class="hero-index" id="heroIndex" hidden><button id="heroPrevious" type="button" aria-label="Previous featured title">&#8249;</button><span id="heroPosition">01 / 01</span><button id="heroNext" type="button" aria-label="Next featured title">&#8250;</button></div>
     </section>
 
     <section class="library-section" id="library">
@@ -28,7 +28,6 @@
       <div id="shelves" class="shelves"></div>
       <div id="emptyState" class="empty-state"><div class="empty-art"><div class="empty-frame"><span>✦</span></div><div class="empty-spark s1">✦</div><div class="empty-spark s2">✦</div><div class="empty-spark s3">✧</div></div><h2>Your next favourite is waiting.</h2><p>Bring your video collection together and make this space yours.</p><div class="empty-actions"><button class="button primary" id="emptyImport"><span>＋</span> Add a series</button><button class="text-button" id="emptyUpload">Upload episodes</button></div><div class="format-note">Your videos stay on this device. Always.</div></div>
     </section>
-    <section class="storage-strip"><span class="storage-icon">◉</span><div><strong>Your private cinema</strong><span>Your library lives right here on your computer.</span></div><span class="storage-lock">⌑ LOCAL & PRIVATE</span></section>
     <footer><span class="footer-brand">NEBFLIX</span><span>Made for your movie nights.</span><span id="footerStats">LOCAL LIBRARY</span></footer>
   </main>
 

@@ -2,7 +2,7 @@ const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const progress = JSON.parse(localStorage.getItem('nebflix-progress') || '{}');
-let library = {shows:[]}, filter='all', activeEpisodes=[], activeIndex=0, toastTimer;
+let library = {shows:[]}, filter='all', activeEpisodes=[], activeIndex=0, heroIndex=0, heroTimer, toastTimer;
 const video = $('#video');
 const savedVolume = localStorage.getItem('nebflix-volume');
 const initialVolume = savedVolume === null ? 0.8 : Number(savedVolume);
@@ -27,6 +27,45 @@ function collectionCard(show) {
   const count = show.episodes.length;
   const artwork = cover ? `<img src="${escapeHtml(cover)}" alt="">` : `<span class="collection-fallback">${escapeHtml(show.title.slice(0, 2).toUpperCase())}</span>`;
   return `<button class="collection-card" type="button" data-show-id="${escapeHtml(show.id)}" aria-label="Open ${escapeHtml(show.title)}"><span class="collection-art">${artwork}<span class="collection-count">${count} episode${count === 1 ? '' : 's'}</span></span><span class="collection-copy"><strong>${escapeHtml(show.title)}</strong><span>${count} episode${count === 1 ? '' : 's'}</span></span></button>`;
+}
+function renderHero() {
+  if (!library.shows.length) {
+    heroIndex = 0;
+    $('#heroTitle').innerHTML = 'Your next<br>great watch.';
+    $('#heroCopy').textContent = 'A place for all the shows you love. Add your first series and make tonight a good one.';
+    $('#heroPlay').innerHTML = '<span>&#9654;</span> Add your first series';
+    $('#heroPlay').dataset.showId = '';
+    $('#heroImage').style.backgroundImage = '';
+    $('#heroPosition').textContent = '01 / 01';
+    $('#heroIndex').hidden = true;
+    return;
+  }
+  heroIndex = ((heroIndex % library.shows.length) + library.shows.length) % library.shows.length;
+  const featured = library.shows[heroIndex];
+  const resume = featured.episodes.find(ep => ep.id === featured.lastEpisodeId && watchedPct(ep) < 95) || featured.episodes.find(ep => watchedPct(ep) > 1 && watchedPct(ep) < 95);
+  const episode = resume || featured.episodes[0];
+  $('#heroTitle').textContent = featured.title.split(' - ')[0];
+  $('#heroCopy').textContent = `${featured.episodes.length} episodes · Continue watching this series, or settle in with the first episode.`;
+  $('#heroPlay').innerHTML = `<span>&#9654;</span> ${resume ? 'Continue watching' : 'Play series'}`;
+  $('#heroPlay').dataset.showId = featured.id;
+  $('#heroImage').style.backgroundImage = episode?.still ? `linear-gradient(90deg,#101010 0%,rgba(16,16,16,.88) 30%,rgba(16,16,16,.22) 70%),linear-gradient(0deg,#101010 0%,transparent 42%),url("${episode.still}")` : '';
+  $('#heroPosition').textContent = `${String(heroIndex + 1).padStart(2, '0')} / ${String(library.shows.length).padStart(2, '0')}`;
+  $('#heroIndex').hidden = library.shows.length < 2;
+}
+function cycleHero(direction) {
+  if (library.shows.length < 2) return;
+  heroIndex = (heroIndex + direction + library.shows.length) % library.shows.length;
+  renderHero();
+  scheduleHeroRotation();
+}
+function scheduleHeroRotation() {
+  clearInterval(heroTimer);
+  if (library.shows.length < 2) return;
+  heroTimer = setInterval(() => {
+    if (document.hidden || $('#player').classList.contains('open')) return;
+    heroIndex = (heroIndex + 1) % library.shows.length;
+    renderHero();
+  }, 8000);
 }
 function carousel(content, rowClass) {
   return `<div class="carousel"><button class="carousel-arrow previous" type="button" data-carousel-step="-1" aria-label="Scroll to previous titles">&#8249;</button><div class="${rowClass}" data-carousel-row>${content}</div><button class="carousel-arrow next" type="button" data-carousel-step="1" aria-label="Scroll to next titles">&#8250;</button></div>`;
@@ -69,14 +108,7 @@ function render() {
   $('#countBadge').textContent = total;
   $('#heroCount').textContent = total ? `${total} EPISODES IN YOUR LIBRARY` : 'READY WHEN YOU ARE';
   $('#footerStats').textContent = `${library.shows.length} SERIES | ${total} EPISODES`;
-  const featured = library.shows[0];
-  const featuredResume = featured?.episodes.find(ep => ep.id === featured.lastEpisodeId && watchedPct(ep) < 95) || featured?.episodes.find(ep => watchedPct(ep) > 1 && watchedPct(ep) < 95);
-  const featuredEpisode = featuredResume || featured?.episodes[0];
-  $('#heroTitle').innerHTML = featured ? escapeHtml(featured.title.split(' - ')[0]) : 'Your next<br>great watch.';
-  $('#heroCopy').textContent = featured ? `${featured.episodes.length} episodes · Continue watching your collection, or settle in with the first episode.` : 'A place for all the shows you love. Add your first series and make tonight a good one.';
-  $('#heroPlay').innerHTML = `<span>&#9654;</span> ${featured ? (featuredResume ? 'Continue watching' : 'Play series') : 'Add your first series'}`;
-  $('#heroImage').style.backgroundImage = featuredEpisode?.still ? `linear-gradient(90deg,#101010 0%,rgba(16,16,16,.88) 30%,rgba(16,16,16,.22) 70%),linear-gradient(0deg,#101010 0%,transparent 42%),url("${featuredEpisode.still}")` : '';
-  $('#heroPlay').dataset.episode = featuredEpisode?.id || '';
+  renderHero();
   const shows = visibleShows();
   const query = $('#search').value.trim();
   const shelves = [];
@@ -93,6 +125,7 @@ function render() {
   $$('#shelves .episode-card').forEach(card => card.addEventListener('click', () => playEpisode(card.dataset.episode)));
   $$('#shelves .collection-card').forEach(card => card.addEventListener('click', () => openShowDetails(card.dataset.showId)));
   setupCarousels();
+  scheduleHeroRotation();
   $('#heroPlay').disabled = total === 0;
   $('#heroPlay').style.opacity = total === 0 ? '.9' : '1';
 }
@@ -313,7 +346,7 @@ $('#browseFolder').onclick = async () => {
 $('#importGo').onclick=async()=>{const button=$('#importGo'),path=$('#folderPath').value.trim();$('#importError').textContent='';if(!path){$('#importError').textContent='Enter the location of a folder to import.';return;}button.disabled=true;button.innerHTML='Importing…';try{const r=await fetch('/api/import-folder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path})}),data=await r.json();if(!r.ok)throw Error(data.error);library=data.library;render();generateStills();closeModals();notify(`${data.added} episode${data.added===1?'':'s'} added to your library.`);}catch(e){$('#importError').textContent=e.message;}finally{button.disabled=false;button.innerHTML='Import folder <span>→</span>';}};
 $('#chooseFiles').onclick=()=>$('#filePicker').click();$('#filePicker').onchange=()=>{$('#selectedFiles').textContent=[...$('#filePicker').files].map(f=>f.name).join(' · ');};
 $('#uploadGo').onclick=async()=>{const files=[...$('#filePicker').files],name=$('#showName').value.trim()||'My uploads';$('#uploadError').textContent='';if(!files.length){$('#uploadError').textContent='Choose at least one video file first.';return;}const button=$('#uploadGo');button.disabled=true;try{for(let i=0;i<files.length;i++){const f=files[i];$('#uploadProgress').textContent=`Adding ${i+1} of ${files.length} · ${f.name}`;const r=await fetch(`/api/upload?show=${encodeURIComponent(name)}&name=${encodeURIComponent(f.name)}`,{method:'POST',headers:{'Content-Type':f.type||'application/octet-stream'},body:f});const data=await r.json();if(!r.ok)throw Error(data.error);library=data.library;}render();generateStills();closeModals();$('#filePicker').value='';$('#selectedFiles').textContent='';$('#uploadProgress').textContent='';notify(`${files.length} episode${files.length===1?'':'s'} added.`);}catch(e){$('#uploadError').textContent=e.message;}finally{button.disabled=false;}};
-$('#playerClose').onclick=closePlayer;$('#player').addEventListener('click',e=>{if(e.target===$('#player'))closePlayer();});$('#prevEp').onclick=()=>{if(activeIndex>0){activeIndex--;openEpisode(activeEpisodes[activeIndex]);}};$('#nextEp').onclick=()=>{if(activeIndex<activeEpisodes.length-1){activeIndex++;openEpisode(activeEpisodes[activeIndex]);}};$('#heroPlay').onclick=()=>{if(library.shows.length)playShow(library.shows[0]);};
+$('#playerClose').onclick=closePlayer;$('#player').addEventListener('click',e=>{if(e.target===$('#player'))closePlayer();});$('#prevEp').onclick=()=>{if(activeIndex>0){activeIndex--;openEpisode(activeEpisodes[activeIndex]);}};$('#nextEp').onclick=()=>{if(activeIndex<activeEpisodes.length-1){activeIndex++;openEpisode(activeEpisodes[activeIndex]);}};$('#heroPrevious').onclick=()=>cycleHero(-1);$('#heroNext').onclick=()=>cycleHero(1);$('#heroPlay').onclick=()=>{const show=library.shows.find(item=>item.id===$('#heroPlay').dataset.showId);if(show)playShow(show);};
 $('#search').oninput=render;$('#sort').onchange=render;$$('.filter').forEach(b=>b.onclick=()=>{$$('.filter').forEach(x=>x.classList.remove('active'));b.classList.add('active');filter=b.dataset.filter;render();});window.addEventListener('resize',()=>$$('.carousel').forEach(updateCarouselState));document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModals();if($('#player').classList.contains('open'))closePlayer();$('#addFab').classList.remove('open');}});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&activeEpisode)persistEpisode(activeEpisode,false,true);});window.addEventListener('pagehide',()=>{if(activeEpisode)persistEpisode(activeEpisode,false,true);});
 loadLibrary().catch(()=>notify('Nebflix could not connect to its local library.'));
