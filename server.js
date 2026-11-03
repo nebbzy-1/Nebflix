@@ -22,6 +22,25 @@ const safe = s => String(s).replace(/[<>:"/\\|?*\x00-\x1f]/g, '').trim().slice(0
 const id = () => crypto.randomUUID();
 const json = (res, status, value) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(value)); };
 const mime = file => ({ '.html':'text/html; charset=utf-8', '.css':'text/css; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.json':'application/json', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.png':'image/png', '.webp':'image/webp', '.svg':'image/svg+xml', '.mp4':'video/mp4', '.m4v':'video/mp4', '.webm':'video/webm', '.mov':'video/quicktime', '.mkv':'video/x-matroska', '.avi':'video/x-msvideo', '.wmv':'video/x-ms-wmv', '.mpg':'video/mpeg', '.mpeg':'video/mpeg', '.ts':'video/mp2t' }[path.extname(file).toLowerCase()] || 'application/octet-stream');
+function parseByteRange(header, size) {
+  if (!header) return null;
+  const match = /^bytes=(\d*)-(\d*)$/i.exec(header.trim());
+  if (!match || (!match[1] && !match[2])) return null;
+
+  let start, end;
+  if (!match[1]) {
+    const suffixLength = Number(match[2]);
+    if (!Number.isSafeInteger(suffixLength) || suffixLength <= 0 || size === 0) return false;
+    start = Math.max(size - suffixLength, 0);
+    end = size - 1;
+  } else {
+    start = Number(match[1]);
+    end = match[2] ? Number(match[2]) : size - 1;
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start >= size || end < start) return false;
+    end = Math.min(end, size - 1);
+  }
+  return { start, end };
+}
 function videoPath(reference) { return path.isAbsolute(reference) ? path.resolve(reference) : path.join(VIDEOS, path.basename(reference)); }
 function storedVideoPath(reference) { return path.isAbsolute(reference) ? null : videoPath(reference); }
 function showFor(db, title) { let show = db.shows.find(x => x.title.toLowerCase() === title.toLowerCase()); if (!show) { show = { id:id(), title, episodes:[] }; db.shows.push(show); } return show; }
@@ -126,9 +145,14 @@ const server = http.createServer(async (req,res) => {
     if (req.method === 'GET' && url.pathname.startsWith('/media/')) {
       const [, , sid, eid] = url.pathname.split('/'); const db=readDb(); const show=db.shows.find(s=>s.id===decodeURIComponent(sid)); const ep=show?.episodes.find(e=>e.id===decodeURIComponent(eid));
       if(!ep) return json(res,404,{error:'Episode not found'}); const file=videoPath(ep.video); if(!fs.existsSync(file))return json(res,404,{error:'Video file is missing'});
-      const stat=fs.statSync(file), range=req.headers.range;
-      if(range){const [a,b]=range.replace(/bytes=/,'').split('-');const start=Number(a),end=b?Math.min(Number(b),stat.size-1):stat.size-1;if(start>=stat.size)return res.writeHead(416,{'Content-Range':`bytes */${stat.size}`}).end();res.writeHead(206,{'Content-Range':`bytes ${start}-${end}/${stat.size}`,'Accept-Ranges':'bytes','Content-Length':end-start+1,'Content-Type':mime(file)});return fs.createReadStream(file,{start,end}).pipe(res);}
-      res.writeHead(200,{'Content-Length':stat.size,'Accept-Ranges':'bytes','Content-Type':mime(file)});return fs.createReadStream(file).pipe(res);
+      const stat=fs.statSync(file), range=parseByteRange(req.headers.range,stat.size);
+      if(range===false)return res.writeHead(416,{'Content-Range':`bytes */${stat.size}`,'Accept-Ranges':'bytes'}).end();
+      const start=range?.start??0,end=range?.end??stat.size-1;
+      const status=range?206:200;
+      const headers={'Accept-Ranges':'bytes','Content-Length':range?end-start+1:stat.size,'Content-Type':mime(file)};
+      if(range)headers['Content-Range']=`bytes ${start}-${end}/${stat.size}`;
+      res.writeHead(status,headers);
+      return fs.createReadStream(file,range?{start,end}:undefined).pipe(res);
     }
     if (req.method === 'GET' && url.pathname.startsWith('/stills/')) { const file=path.join(STILLS,path.basename(url.pathname)); if(!fs.existsSync(file))return res.writeHead(404).end();res.writeHead(200,{'Content-Type':'image/jpeg','Cache-Control':'public, max-age=31536000, immutable'});return fs.createReadStream(file).pipe(res); }
     const requested=decodeURIComponent(url.pathname);
