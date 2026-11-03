@@ -1,6 +1,6 @@
 # Nebflix
 
-A private video library that runs on your computer. Imported videos and episode stills are stored in the `library` folder alongside the app. Viewing progress is saved in this browser.
+A private video library that runs on your computer. The catalogue and episode stills are stored in the `library` folder. Folder imports use videos in their existing locations; individual file uploads are copied into `library/videos`.
 
 ## Start Nebflix
 
@@ -15,11 +15,11 @@ You can also double-click `Launch Nebflix.cmd` on your Desktop. It starts the se
 
 ## Add videos
 
-- Select **Add a series** or the **＋** button, then import a folder. Paste a folder path from your computer, such as `C:\Users\you\Videos\My Series`. Nebflix searches inside it and copies supported video files into `library/videos`.
-- Or choose **Upload episodes** and select video files. Give them a series name so they appear together.
+- Select **Add a series** or the **+** button, then browse to a folder or paste its path. Each imported folder appears as one clickable show or movie card, with its episodes inside. Nebflix references folder videos in place, so they are not duplicated. Keep the source folder where it is so the videos remain available.
+- Or choose **Upload episodes** and select video files. Give them a series name so they appear together; uploaded files are copied into `library/videos`.
 
-Nebflix creates episode stills in `library/stills` when the browser can decode the video format. Browsers do not support every format; MP4/H.264 is the most widely supported for playback and stills. MKV files can be imported, though playback depends on the browser and codecs installed on the computer.
+Nebflix creates episode stills in `library/stills` when the browser can decode the video format. Browsers do not support every video and audio format; MP4/H.264 is widely supported for playback and stills. MKV files can be imported, though playback depends on the browser and installed codecs.
 
 Playback position and the last episode are saved in this browser and in `library/library.json`.
 
-The `library` folder contains your video files, stills, and catalogue. Keep it if you want to preserve your library, or back it up separately. The app does not send video files to a server; it only listens on your computer at localhost.
+The `library` folder contains your catalogue, stills, and uploaded video copies. Keep it if you want to preserve those items, or back it up separately. The app does not send video files to a server; it only listens on your computer at localhost.

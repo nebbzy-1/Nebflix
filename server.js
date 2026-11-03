@@ -22,15 +22,45 @@ const safe = s => String(s).replace(/[<>:"/\\|?*\x00-\x1f]/g, '').trim().slice(0
 const id = () => crypto.randomUUID();
 const json = (res, status, value) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(value)); };
 const mime = file => ({ '.html':'text/html; charset=utf-8', '.css':'text/css; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.json':'application/json', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.png':'image/png', '.webp':'image/webp', '.svg':'image/svg+xml', '.mp4':'video/mp4', '.m4v':'video/mp4', '.webm':'video/webm', '.mov':'video/quicktime', '.mkv':'video/x-matroska', '.avi':'video/x-msvideo', '.wmv':'video/x-ms-wmv', '.mpg':'video/mpeg', '.mpeg':'video/mpeg', '.ts':'video/mp2t' }[path.extname(file).toLowerCase()] || 'application/octet-stream');
+function videoPath(reference) { return path.isAbsolute(reference) ? path.resolve(reference) : path.join(VIDEOS, path.basename(reference)); }
+function storedVideoPath(reference) { return path.isAbsolute(reference) ? null : videoPath(reference); }
 function showFor(db, title) { let show = db.shows.find(x => x.title.toLowerCase() === title.toLowerCase()); if (!show) { show = { id:id(), title, episodes:[] }; db.shows.push(show); } return show; }
 function episodeFor(show, filename, video) { return show.episodes.find(e => e.filename === filename) || { id:id(), filename, title:filename.replace(/\.[^.]+$/, '').replace(/[._]/g,' ').trim(), video, still:null, addedAt:Date.now() }; }
 function walk(dir, result = []) { for (const item of fs.readdirSync(dir, { withFileTypes:true })) { const full = path.join(dir,item.name); if (item.isDirectory()) walk(full,result); else if (VIDEO_EXT.has(path.extname(item.name).toLowerCase())) result.push(full); } return result; }
+function browseForFolder() {
+  return new Promise((resolve, reject) => {
+    const command = [
+      'Add-Type -AssemblyName System.Windows.Forms',
+      '$dialog = New-Object System.Windows.Forms.FolderBrowserDialog',
+      "$dialog.Description = 'Choose a folder containing videos'",
+      '$dialog.ShowNewFolderButton = $false',
+      'if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Write([Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($dialog.SelectedPath))) }'
+    ].join('; ');
+    const picker = spawn('powershell.exe', ['-NoLogo', '-NoProfile', '-STA', '-Command', command], { windowsHide:true, stdio:['ignore','pipe','pipe'] });
+    let output = '', error = '';
+    picker.stdout.setEncoding('ascii');
+    picker.stderr.setEncoding('utf8');
+    picker.stdout.on('data', chunk => { output += chunk; });
+    picker.stderr.on('data', chunk => { error = (error + chunk).slice(-2000); });
+    picker.once('error', reject);
+    picker.once('close', code => {
+      if (code !== 0) return reject(new Error(error.trim() || `Folder picker exited with code ${code}`));
+      const encoded = output.trim();
+      resolve(encoded ? Buffer.from(encoded, 'base64').toString('utf16le') : '');
+    });
+  });
+}
 function decorate(db) { return { progress:db.progress||{}, shows: db.shows.map(s => ({ ...s, episodes:s.episodes.map(e => ({...e, url:`/media/${encodeURIComponent(s.id)}/${encodeURIComponent(e.id)}`})) })) }; }
 
 const server = http.createServer(async (req,res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     if (req.method === 'GET' && url.pathname === '/api/library') return json(res,200,decorate(readDb()));
+    if (req.method === 'POST' && url.pathname === '/api/browse-folder') {
+      if (process.platform !== 'win32') return json(res,501,{error:'The folder picker is available when Nebflix runs on Windows. You can paste a folder path instead.'});
+      const folder = await browseForFolder();
+      return json(res,200,{path:folder});
+    }
     if (req.method === 'POST' && url.pathname === '/api/progress') {
       let body=''; for await (const chunk of req) { body+=chunk; if(body.length>4000)return json(res,413,{error:'Progress update is too large'}); }
       const item=JSON.parse(body), time=Number(item.time), duration=Number(item.duration);
@@ -52,9 +82,8 @@ const server = http.createServer(async (req,res) => {
       if (!fs.existsSync(folder) || !fs.statSync(folder).isDirectory()) return json(res,400,{error:'That folder could not be found. Check the path and try again.'});
       const files = walk(folder); if (!files.length) return json(res,400,{error:'I could not find any video files in that folder.'});
       const db=readDb(), title=safe(path.basename(folder)), show=showFor(db,title); let added=0;
-      for (const source of files) { const filename=path.basename(source), existing=show.episodes.find(e=>e.filename.toLowerCase()===filename.toLowerCase()); if(existing) continue;
-        const ext=path.extname(filename), stored=`${crypto.randomUUID()}${ext}`; await fs.promises.copyFile(source,path.join(VIDEOS,stored));
-        show.episodes.push({id:id(),filename,title:filename.replace(/\.[^.]+$/,'').replace(/[._]/g,' ').trim(),video:stored,still:null,addedAt:Date.now()}); added++;
+      for (const source of files) { const filename=path.basename(source), absolute=path.resolve(source), existing=show.episodes.find(e=>e.filename.toLowerCase()===filename.toLowerCase() || (path.isAbsolute(e.video)&&path.resolve(e.video).toLowerCase()===absolute.toLowerCase())); if(existing) continue;
+        show.episodes.push({id:id(),filename,title:filename.replace(/\.[^.]+$/,'').replace(/[._]/g,' ').trim(),video:absolute,still:null,addedAt:Date.now()}); added++;
       }
       saveDb(db); return json(res,200,{added,found:files.length,library:decorate(db)});
     }
@@ -76,12 +105,12 @@ const server = http.createServer(async (req,res) => {
     }
     if (req.method === 'DELETE' && url.pathname.startsWith('/api/episode/')) {
       const eid=decodeURIComponent(url.pathname.split('/').pop()), db=readDb(); let removed=false;
-      for(const show of db.shows){const n=show.episodes.findIndex(e=>e.id===eid);if(n>=0){const [ep]=show.episodes.splice(n,1);try{fs.unlinkSync(path.join(VIDEOS,ep.video));fs.unlinkSync(path.join(STILLS,`${eid}.jpg`));}catch{}removed=true;break;}}
+      for(const show of db.shows){const n=show.episodes.findIndex(e=>e.id===eid);if(n>=0){const [ep]=show.episodes.splice(n,1);const stored=storedVideoPath(ep.video);if(stored)try{fs.unlinkSync(stored);}catch{}try{fs.unlinkSync(path.join(STILLS,`${eid}.jpg`));}catch{}removed=true;break;}}
       db.shows=db.shows.filter(s=>s.episodes.length);saveDb(db);return json(res,removed?200:404,{library:decorate(db)});
     }
     if (req.method === 'GET' && url.pathname.startsWith('/media/')) {
       const [, , sid, eid] = url.pathname.split('/'); const db=readDb(); const show=db.shows.find(s=>s.id===decodeURIComponent(sid)); const ep=show?.episodes.find(e=>e.id===decodeURIComponent(eid));
-      if(!ep) return json(res,404,{error:'Episode not found'}); const file=path.join(VIDEOS,path.basename(ep.video)); if(!fs.existsSync(file))return json(res,404,{error:'Video file is missing'});
+      if(!ep) return json(res,404,{error:'Episode not found'}); const file=videoPath(ep.video); if(!fs.existsSync(file))return json(res,404,{error:'Video file is missing'});
       const stat=fs.statSync(file), range=req.headers.range;
       if(range){const [a,b]=range.replace(/bytes=/,'').split('-');const start=Number(a),end=b?Math.min(Number(b),stat.size-1):stat.size-1;if(start>=stat.size)return res.writeHead(416,{'Content-Range':`bytes */${stat.size}`}).end();res.writeHead(206,{'Content-Range':`bytes ${start}-${end}/${stat.size}`,'Accept-Ranges':'bytes','Content-Length':end-start+1,'Content-Type':mime(file)});return fs.createReadStream(file,{start,end}).pipe(res);}
       res.writeHead(200,{'Content-Length':stat.size,'Accept-Ranges':'bytes','Content-Type':mime(file)});return fs.createReadStream(file).pipe(res);
