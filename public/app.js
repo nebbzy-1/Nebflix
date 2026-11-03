@@ -84,6 +84,8 @@ function openShowDetails(showId) {
   if (!show) return;
   $('#showDetailTitle').textContent = show.title;
   $('#showDetailMeta').textContent = `${show.episodes.length} episode${show.episodes.length === 1 ? '' : 's'}`;
+  $('#removeShow').dataset.showId = show.id;
+  $('#removeError').textContent = '';
   $('#showDetailEpisodes').innerHTML = show.episodes.map(ep => tile(ep, show)).join('');
   showModal('showDetailModal');
   $$('#showDetailEpisodes .episode-card').forEach(card => card.addEventListener('click', () => playEpisode(card.dataset.episode)));
@@ -244,6 +246,28 @@ function makeStill(ep) {
 }
 $('#addFab').addEventListener('click',e=>{if(e.target.closest('.fab-menu'))return;$('#addFab').classList.toggle('open');});$('#fabImport').onclick=()=>showModal('importModal');$('#fabUpload').onclick=()=>showModal('uploadModal');$('#emptyImport').onclick=()=>showModal('importModal');$('#emptyUpload').onclick=()=>showModal('uploadModal');$('#browseButton').onclick=()=>$('#library').scrollIntoView({behavior:'smooth'});
 $$('[data-close]').forEach(b=>b.addEventListener('click',closeModals));$$('.modal-backdrop').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)closeModals();}));document.addEventListener('click',e=>{if(!e.target.closest('#addFab'))$('#addFab').classList.remove('open');});
+$('#removeShow').onclick = async () => {
+  const show = library.shows.find(item => item.id === $('#removeShow').dataset.showId);
+  if (!show || !confirm(`Remove "${show.title}" from Nebflix? Videos in their original folders will stay there.`)) return;
+  const button = $('#removeShow');
+  button.disabled = true;
+  $('#removeError').textContent = '';
+  try {
+    const response = await fetch(`/api/show/${encodeURIComponent(show.id)}`, { method:'DELETE' });
+    const data = await response.json();
+    if (!response.ok) throw Error(data.error || 'Could not remove this series.');
+    for (const episode of show.episodes) delete progress[episode.id];
+    saveProgress();
+    library = data.library;
+    closeModals();
+    render();
+    notify('Series removed from Nebflix.');
+  } catch (error) {
+    $('#removeError').textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+};
 $('#browseFolder').onclick = async () => {
   const button = $('#browseFolder');
   $('#importError').textContent = '';

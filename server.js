@@ -103,6 +103,21 @@ const server = http.createServer(async (req,res) => {
       if(!found) return json(res,404,{error:'Episode not found'});
       const out=path.join(STILLS,`${eid}.jpg`); fs.writeFileSync(out,Buffer.concat(chunks)); found.still=`/stills/${eid}.jpg`; saveDb(db); return json(res,200,{still:found.still});
     }
+    if (req.method === 'DELETE' && url.pathname.startsWith('/api/show/')) {
+      const sid=decodeURIComponent(url.pathname.split('/').pop()), db=readDb(), index=db.shows.findIndex(show=>show.id===sid);
+      if(index<0) return json(res,404,{error:'Series not found'});
+      const [show]=db.shows.splice(index,1);
+      for(const ep of show.episodes) delete db.progress[ep.id];
+      saveDb(db);
+      for(const ep of show.episodes){
+        const stored=storedVideoPath(ep.video);
+        for(const file of [stored,path.join(STILLS,`${ep.id}.jpg`)]){
+          if(!file) continue;
+          try{fs.unlinkSync(file);}catch(err){if(err.code!=='ENOENT')console.warn(`Could not remove ${file}:`,err.message);}
+        }
+      }
+      return json(res,200,{library:decorate(db)});
+    }
     if (req.method === 'DELETE' && url.pathname.startsWith('/api/episode/')) {
       const eid=decodeURIComponent(url.pathname.split('/').pop()), db=readDb(); let removed=false;
       for(const show of db.shows){const n=show.episodes.findIndex(e=>e.id===eid);if(n>=0){const [ep]=show.episodes.splice(n,1);const stored=storedVideoPath(ep.video);if(stored)try{fs.unlinkSync(stored);}catch{}try{fs.unlinkSync(path.join(STILLS,`${eid}.jpg`));}catch{}removed=true;break;}}
