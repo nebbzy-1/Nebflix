@@ -20,6 +20,6 @@ You can also double-click `Launch Nebflix.cmd` on your Desktop. It starts the se
 
 Nebflix creates episode stills in `library/stills` when the browser can decode the video format. Browsers do not support every format; MP4/H.264 is the most widely supported for playback and stills. MKV files can be imported, though playback depends on the browser and codecs installed on the computer.
 
-Playback position and the last episode are also saved in `library/library.json`. When an MP4 contains AC-3 audio, Nebflix uses FFmpeg to make a small AAC audio copy that browsers can play; the video itself is not converted. Install FFmpeg from Command Prompt with `winget install --id Gyan.FFmpeg.Shared -e`, then close and reopen Command Prompt and restart Nebflix. Converted audio is saved in `library/audio`.
+Playback position and the last episode are saved in this browser and in `library/library.json`.
 
 The `library` folder contains your video files, stills, and catalogue. Keep it if you want to preserve your library, or back it up separately. The app does not send video files to a server; it only listens on your computer at localhost.
