@@ -28,6 +28,30 @@ function collectionCard(show) {
   const artwork = cover ? `<img src="${escapeHtml(cover)}" alt="">` : `<span class="collection-fallback">${escapeHtml(show.title.slice(0, 2).toUpperCase())}</span>`;
   return `<button class="collection-card" type="button" data-show-id="${escapeHtml(show.id)}" aria-label="Open ${escapeHtml(show.title)}"><span class="collection-art">${artwork}<span class="collection-count">${count} episode${count === 1 ? '' : 's'}</span></span><span class="collection-copy"><strong>${escapeHtml(show.title)}</strong><span>${count} episode${count === 1 ? '' : 's'}</span></span></button>`;
 }
+function carousel(content, rowClass) {
+  return `<div class="carousel"><button class="carousel-arrow previous" type="button" data-carousel-step="-1" aria-label="Scroll to previous titles">&#8249;</button><div class="${rowClass}" data-carousel-row>${content}</div><button class="carousel-arrow next" type="button" data-carousel-step="1" aria-label="Scroll to next titles">&#8250;</button></div>`;
+}
+function updateCarouselState(carouselElement) {
+  const row = carouselElement.querySelector('[data-carousel-row]');
+  if (!row) return;
+  const buttons = carouselElement.querySelectorAll('.carousel-arrow');
+  const maxScroll = row.scrollWidth - row.clientWidth;
+  const overflowing = maxScroll > 2;
+  carouselElement.classList.toggle('has-overflow', overflowing);
+  buttons[0].disabled = !overflowing || row.scrollLeft <= 2;
+  buttons[1].disabled = !overflowing || row.scrollLeft >= maxScroll - 2;
+}
+function setupCarousels() {
+  $$('.carousel').forEach(carouselElement => {
+    const row = carouselElement.querySelector('[data-carousel-row]');
+    row.addEventListener('scroll', () => updateCarouselState(carouselElement), { passive:true });
+    carouselElement.querySelectorAll('.carousel-arrow').forEach(button => button.addEventListener('click', () => {
+      const rowStep = Math.max(row.clientWidth * .8, 150);
+      row.scrollBy({ left:Number(button.dataset.carouselStep) * rowStep, behavior:'smooth' });
+    }));
+    updateCarouselState(carouselElement);
+  });
+}
 function visibleShows() {
   let shows = [...library.shows];
   const query = $('#search').value.trim().toLowerCase();
@@ -57,9 +81,9 @@ function render() {
   const query = $('#search').value.trim();
   const shelves = [];
   const continuing = shows.flatMap(show => show.episodes.filter(ep => watchedPct(ep) > 2 && watchedPct(ep) < 95).map(ep => ({ ep, show })));
-  if (continuing.length && filter !== 'unwatched') shelves.push(`<section class="shelf"><h2>Continue watching <span>&rsaquo;</span></h2><div class="episode-row">${continuing.map(item => tile(item.ep, item.show)).join('')}</div></section>`);
+  if (continuing.length && filter !== 'unwatched') shelves.push(`<section class="shelf"><h2>Continue watching <span>&rsaquo;</span></h2>${carousel(continuing.map(item => tile(item.ep, item.show)).join(''), 'episode-row')}</section>`);
   if (filter === 'continue' && !continuing.length) shelves.push('<div class="no-results">Nothing in progress yet. Start an episode and it will appear here.</div>');
-  if (filter !== 'continue' && shows.length) shelves.push(`<section class="shelf"><h2>Shows and movies <span>${shows.length} title${shows.length === 1 ? '' : 's'}</span></h2><div class="collection-row">${shows.map(collectionCard).join('')}</div></section>`);
+  if (filter !== 'continue' && shows.length) shelves.push(`<section class="shelf"><h2>Shows and movies <span>${shows.length} title${shows.length === 1 ? '' : 's'}</span></h2>${carousel(shows.map(collectionCard).join(''), 'collection-row')}</section>`);
   if (filter === 'unwatched' && !shows.length) shelves.push('<div class="no-results">Everything in your library has been watched.</div>');
   if (query && !shelves.length) shelves.push('<div class="no-results">No titles found. Try a different search.</div>');
   $('#libraryCaption').textContent = total ? `${library.shows.length} series · ${total} episodes` : 'A little room for your next favourite.';
@@ -68,6 +92,7 @@ function render() {
   $('#shelves').innerHTML = shelves.join('');
   $$('#shelves .episode-card').forEach(card => card.addEventListener('click', () => playEpisode(card.dataset.episode)));
   $$('#shelves .collection-card').forEach(card => card.addEventListener('click', () => openShowDetails(card.dataset.showId)));
+  setupCarousels();
   $('#heroPlay').disabled = total === 0;
   $('#heroPlay').style.opacity = total === 0 ? '.9' : '1';
 }
@@ -289,7 +314,7 @@ $('#importGo').onclick=async()=>{const button=$('#importGo'),path=$('#folderPath
 $('#chooseFiles').onclick=()=>$('#filePicker').click();$('#filePicker').onchange=()=>{$('#selectedFiles').textContent=[...$('#filePicker').files].map(f=>f.name).join(' · ');};
 $('#uploadGo').onclick=async()=>{const files=[...$('#filePicker').files],name=$('#showName').value.trim()||'My uploads';$('#uploadError').textContent='';if(!files.length){$('#uploadError').textContent='Choose at least one video file first.';return;}const button=$('#uploadGo');button.disabled=true;try{for(let i=0;i<files.length;i++){const f=files[i];$('#uploadProgress').textContent=`Adding ${i+1} of ${files.length} · ${f.name}`;const r=await fetch(`/api/upload?show=${encodeURIComponent(name)}&name=${encodeURIComponent(f.name)}`,{method:'POST',headers:{'Content-Type':f.type||'application/octet-stream'},body:f});const data=await r.json();if(!r.ok)throw Error(data.error);library=data.library;}render();generateStills();closeModals();$('#filePicker').value='';$('#selectedFiles').textContent='';$('#uploadProgress').textContent='';notify(`${files.length} episode${files.length===1?'':'s'} added.`);}catch(e){$('#uploadError').textContent=e.message;}finally{button.disabled=false;}};
 $('#playerClose').onclick=closePlayer;$('#player').addEventListener('click',e=>{if(e.target===$('#player'))closePlayer();});$('#prevEp').onclick=()=>{if(activeIndex>0){activeIndex--;openEpisode(activeEpisodes[activeIndex]);}};$('#nextEp').onclick=()=>{if(activeIndex<activeEpisodes.length-1){activeIndex++;openEpisode(activeEpisodes[activeIndex]);}};$('#heroPlay').onclick=()=>{if(library.shows.length)playShow(library.shows[0]);};
-$('#search').oninput=render;$('#sort').onchange=render;$$('.filter').forEach(b=>b.onclick=()=>{$$('.filter').forEach(x=>x.classList.remove('active'));b.classList.add('active');filter=b.dataset.filter;render();});document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModals();if($('#player').classList.contains('open'))closePlayer();$('#addFab').classList.remove('open');}});
+$('#search').oninput=render;$('#sort').onchange=render;$$('.filter').forEach(b=>b.onclick=()=>{$$('.filter').forEach(x=>x.classList.remove('active'));b.classList.add('active');filter=b.dataset.filter;render();});window.addEventListener('resize',()=>$$('.carousel').forEach(updateCarouselState));document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModals();if($('#player').classList.contains('open'))closePlayer();$('#addFab').classList.remove('open');}});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&activeEpisode)persistEpisode(activeEpisode,false,true);});window.addEventListener('pagehide',()=>{if(activeEpisode)persistEpisode(activeEpisode,false,true);});
 loadLibrary().catch(()=>notify('Nebflix could not connect to its local library.'));
 
