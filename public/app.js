@@ -4,15 +4,106 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'
 const progress = JSON.parse(localStorage.getItem('nebflix-progress') || '{}');
 let library = {shows:[]}, filter='all', activeEpisodes=[], activeIndex=0, heroIndex=0, heroTimer, toastTimer;
 const video = $('#video');
+const audioBridge = $('#audioBridge');
+let audioBridgeActive = false, audioBridgeGeneration = 0;
 const savedVolume = localStorage.getItem('nebflix-volume');
 const initialVolume = savedVolume === null ? 0.8 : Number(savedVolume);
-video.volume = Number.isFinite(initialVolume) && initialVolume >= 0 && initialVolume <= 1 ? initialVolume : 0.8;
-video.muted = localStorage.getItem('nebflix-muted') === 'true';
+video.volume = Number.isFinite(initialVolume) && initialVolume > 0 && initialVolume <= 1 ? initialVolume : 0.8;
+video.muted = false;
 video.addEventListener('volumechange', () => {
   localStorage.setItem('nebflix-volume', String(video.volume));
-  localStorage.setItem('nebflix-muted', String(video.muted));
+  if (audioBridgeActive) {
+    audioBridge.volume = video.volume;
+    audioBridge.muted = video.muted;
+    syncAudioBridge();
+  }
 });
 let activeEpisode = null, lastServerProgressSave = 0;
+
+function stopAudioBridge() {
+  audioBridgeGeneration++;
+  audioBridgeActive = false;
+  $('#enableAudio').hidden = true;
+  audioBridge.onloadedmetadata = null;
+  audioBridge.onerror = null;
+  audioBridge.pause();
+  audioBridge.removeAttribute('src');
+  audioBridge.load();
+}
+function syncAudioBridge(forceSeek = false) {
+  if (!audioBridgeActive || audioBridge.readyState < 1) return;
+  const targetTime = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+  const maxTime = Number.isFinite(audioBridge.duration) ? audioBridge.duration : targetTime;
+  const alignedTime = Math.min(targetTime, maxTime);
+  if (forceSeek || Math.abs(audioBridge.currentTime - alignedTime) > 0.35) audioBridge.currentTime = alignedTime;
+  audioBridge.playbackRate = video.playbackRate;
+  audioBridge.volume = video.volume;
+  audioBridge.muted = video.muted;
+  if (video.paused) {
+    if (!audioBridge.paused) audioBridge.pause();
+  } else if (audioBridge.paused) {
+    audioBridge.play().catch(() => {
+      $('#playbackError').textContent = 'The browser blocked the compatible audio track. Click the video play button to enable it.';
+      $('#enableAudio').hidden = false;
+    });
+  }
+}
+async function prepareCompatibleAudio(ep) {
+  const show = library.shows.find(item => item.episodes.some(episode => episode.id === ep.id));
+  if (!show) return;
+  const generation = audioBridgeGeneration;
+  const endpoint = `/api/audio-compat/${encodeURIComponent(show.id)}/${encodeURIComponent(ep.id)}`;
+  try {
+    const probeResponse = await fetch(endpoint, { cache:'no-store' });
+    const probe = await probeResponse.json();
+    if (generation !== audioBridgeGeneration || activeEpisode?.id !== ep.id) return;
+    if (!probeResponse.ok) throw new Error(probe.error || 'Could not inspect the audio track.');
+    if (!probe.hasAudio) {
+      $('#playbackError').textContent = 'This video file has no audio track.';
+      return;
+    }
+    if (!probe.needsFallback) return;
+    const codecMime = {
+      ac3:'audio/mp4; codecs="ac-3"', eac3:'audio/mp4; codecs="ec-3"',
+      dts:'audio/mp4; codecs="dtsc"', dca:'audio/mp4; codecs="dtsc"',
+      truehd:'audio/mp4; codecs="mlpa"', mlp:'audio/mp4; codecs="mlpa"',
+      mp2:'audio/mpeg; codecs="mp2"', wmapro:'audio/x-ms-wma'
+    }[probe.codec] || `audio/${probe.codec}`;
+    if (audioBridge.canPlayType(codecMime)) return;
+
+    $('#playbackError').textContent = `Preparing browser-compatible ${probe.codec.toUpperCase()} audio…`;
+    const convertResponse = await fetch(endpoint, { method:'POST' });
+    const converted = await convertResponse.json();
+    if (generation !== audioBridgeGeneration || activeEpisode?.id !== ep.id) return;
+    if (!convertResponse.ok || !converted.url) throw new Error(converted.error || 'Could not prepare browser-compatible audio.');
+    audioBridgeActive = true;
+    audioBridge.volume = video.volume;
+    audioBridge.muted = video.muted;
+    audioBridge.src = converted.url;
+    audioBridge.onloadedmetadata = () => {
+      if (generation === audioBridgeGeneration) {
+        $('#playbackError').textContent = '';
+        syncAudioBridge(true);
+      }
+    };
+    audioBridge.onerror = () => {
+      if (generation === audioBridgeGeneration) $('#playbackError').textContent = 'The browser could not load the compatible audio track.';
+    };
+    audioBridge.load();
+  } catch (error) {
+    if (generation === audioBridgeGeneration && activeEpisode?.id === ep.id) {
+      $('#playbackError').textContent = error.message;
+    }
+  }
+}
+video.addEventListener('play', () => syncAudioBridge(true));
+video.addEventListener('pause', () => audioBridge.pause());
+video.addEventListener('seeking', () => { if (audioBridgeActive) audioBridge.pause(); });
+video.addEventListener('seeked', () => syncAudioBridge(true));
+video.addEventListener('timeupdate', () => syncAudioBridge());
+video.addEventListener('ratechange', () => { if (audioBridgeActive) audioBridge.playbackRate = video.playbackRate; });
+audioBridge.addEventListener('playing', () => { $('#playbackError').textContent = ''; $('#enableAudio').hidden = true; });
+$('#enableAudio').onclick=()=>audioBridge.play().then(()=>{ $('#playbackError').textContent=''; $('#enableAudio').hidden=true; }).catch(()=>{});
 
 function saveProgress(){localStorage.setItem('nebflix-progress',JSON.stringify(progress));}
 function notify(message){const toast=$('#toast');toast.textContent=message;toast.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('show'),2600);}
@@ -185,6 +276,7 @@ function persistEpisode(ep, completed = false, beacon = false) {
 }
 async function openEpisode(ep) {
   if (!ep) return;
+  stopAudioBridge();
   if (activeEpisode && activeEpisode.id !== ep.id) persistEpisode(activeEpisode, false, true);
   activeEpisode = ep;
   video.onpause = null;
@@ -197,6 +289,7 @@ async function openEpisode(ep) {
   $('#playerTitle').textContent = ep.title;
   $('#player').classList.add('open');
   video.src = ep.url;
+  prepareCompatibleAudio(ep);
   video.onloadedmetadata = () => {
     const p = progress[ep.id];
     if (p?.duration && p.time > 5 && p.time < video.duration - 5) video.currentTime = p.time;
@@ -233,6 +326,7 @@ async function openEpisode(ep) {
 function updateNav(){$('#prevEp').disabled=activeIndex<=0;$('#nextEp').disabled=activeIndex>=activeEpisodes.length-1;}
 function closePlayer() {
   if (activeEpisode) persistEpisode(activeEpisode, false, true);
+  stopAudioBridge();
   activeEpisode = null;
   video.onpause = null;
   video.pause();

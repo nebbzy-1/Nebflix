@@ -33,3 +33,5 @@
 .episode-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;max-height:55vh;overflow-y:auto;padding:2px 6px 10px 2px}
 .episode-grid .episode-card{flex:none}
 @media(max-width:620px){.folder-picker-row{align-items:stretch}.browse-folder{padding:0 11px}.collection-card{flex-basis:42vw;max-width:190px}.carousel-arrow{width:32px;height:32px;font-size:25px}.hero-index{right:17px;bottom:26px;gap:7px}.hero-index button{width:33px;height:33px;font-size:23px}.episode-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}}
+.player-tools #enableAudio{height:29px;padding:0 10px;border:1px solid #777;border-radius:3px;background:#292929;color:#fff;font:500 10px var(--font);cursor:pointer}
+.player-tools #enableAudio:hover{background:#3b3b3b}

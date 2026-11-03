@@ -18,7 +18,7 @@ You can also double-click `Launch Nebflix.cmd` on your Desktop. It starts the se
 - Select **Add a series** or the **+** button, then browse to a folder or paste its path. Each imported folder appears as one clickable show or movie card, with its episodes inside. Nebflix references folder videos in place, so they are not duplicated. Keep the source folder where it is so the videos remain available.
 - Or choose **Upload episodes** and select video files. Give them a series name so they appear together; uploaded files are copied into `library/videos`.
 
-Nebflix creates episode stills in `library/stills` when the browser can decode the video format. Browsers do not support every video and audio format; MP4/H.264 is widely supported for playback and stills. MKV files can be imported, though playback depends on the browser and installed codecs.
+Nebflix creates episode stills in `library/stills` when the browser can decode the video format. Browsers do not support every video and audio format; MP4/H.264 with AAC audio is widely supported for playback and stills. If an audio codec such as AC-3 is unsupported, Nebflix uses FFmpeg (when installed) to make a cached AAC audio track while keeping the original video file unchanged. MKV files can be imported, though playback depends on the browser and installed codecs.
 
 Playback position and the last episode are saved in this browser and in `library/library.json`.
 

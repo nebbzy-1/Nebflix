@@ -10,10 +10,11 @@ const PUBLIC = path.join(ROOT, 'public');
 const DATA = path.join(ROOT, 'library');
 const VIDEOS = path.join(DATA, 'videos');
 const STILLS = path.join(DATA, 'stills');
+const AUDIO_CACHE = path.join(DATA, 'audio-cache');
 const DB = path.join(DATA, 'library.json');
 const PORT = Number(process.env.PORT || 4173);
 const VIDEO_EXT = new Set(['.mp4', '.mkv', '.avi', '.mov', '.m4v', '.webm', '.wmv', '.mpg', '.mpeg', '.ts']);
-for (const dir of [PUBLIC, VIDEOS, STILLS]) fs.mkdirSync(dir, { recursive: true });
+for (const dir of [PUBLIC, VIDEOS, STILLS, AUDIO_CACHE]) fs.mkdirSync(dir, { recursive: true });
 if (!fs.existsSync(DB)) fs.writeFileSync(DB, JSON.stringify({ shows: [] }, null, 2));
 
 const readDb = () => { try { const db=JSON.parse(fs.readFileSync(DB, 'utf8')); if(!Array.isArray(db.shows))db.shows=[]; if(!db.progress||typeof db.progress!=='object')db.progress={}; return db; } catch { return { shows: [], progress:{} }; } };
@@ -21,7 +22,7 @@ const saveDb = db => fs.writeFileSync(DB, JSON.stringify(db, null, 2));
 const safe = s => String(s).replace(/[<>:"/\\|?*\x00-\x1f]/g, '').trim().slice(0, 180) || 'Untitled';
 const id = () => crypto.randomUUID();
 const json = (res, status, value) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(value)); };
-const mime = file => ({ '.html':'text/html; charset=utf-8', '.css':'text/css; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.json':'application/json', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.png':'image/png', '.webp':'image/webp', '.svg':'image/svg+xml', '.mp4':'video/mp4', '.m4v':'video/mp4', '.webm':'video/webm', '.mov':'video/quicktime', '.mkv':'video/x-matroska', '.avi':'video/x-msvideo', '.wmv':'video/x-ms-wmv', '.mpg':'video/mpeg', '.mpeg':'video/mpeg', '.ts':'video/mp2t' }[path.extname(file).toLowerCase()] || 'application/octet-stream');
+const mime = file => ({ '.html':'text/html; charset=utf-8', '.css':'text/css; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.json':'application/json', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.png':'image/png', '.webp':'image/webp', '.svg':'image/svg+xml', '.mp4':'video/mp4', '.m4a':'audio/mp4', '.m4v':'video/mp4', '.webm':'video/webm', '.mov':'video/quicktime', '.mkv':'video/x-matroska', '.avi':'video/x-msvideo', '.wmv':'video/x-ms-wmv', '.mpg':'video/mpeg', '.mpeg':'video/mpeg', '.ts':'video/mp2t' }[path.extname(file).toLowerCase()] || 'application/octet-stream');
 function parseByteRange(header, size) {
   if (!header) return null;
   const match = /^bytes=(\d*)-(\d*)$/i.exec(header.trim());
@@ -40,6 +41,56 @@ function parseByteRange(header, size) {
     end = Math.min(end, size - 1);
   }
   return { start, end };
+}
+const audioCodecsNeedingAac = new Set(['ac3', 'eac3', 'dts', 'dca', 'truehd', 'mlp', 'mp2', 'wmapro']);
+const audioProbeCache = new Map(), audioConversionJobs = new Map();
+function runMediaTool(command, args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { windowsHide:true, stdio:['ignore', 'pipe', 'pipe'] });
+    let stdout = '', stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', chunk => { if (stdout.length < 200000) stdout += chunk; });
+    child.stderr.on('data', chunk => { if (stderr.length < 200000) stderr += chunk; });
+    child.once('error', reject);
+    child.once('close', code => code === 0 ? resolve(stdout) : reject(new Error(stderr.trim() || `${command} exited with code ${code}`)));
+  });
+}
+function probeAudioCodec(file, stat) {
+  const cacheKey = `${file}\0${stat.size}\0${stat.mtimeMs}`;
+  if (!audioProbeCache.has(cacheKey)) {
+    const ffprobe = process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe';
+    const probe = runMediaTool(ffprobe, ['-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=codec_name', '-of', 'json', file])
+      .then(output => JSON.parse(output).streams?.[0]?.codec_name?.toLowerCase() || null);
+    audioProbeCache.set(cacheKey, probe);
+  }
+  return audioProbeCache.get(cacheKey);
+}
+async function prepareCompatibleAudio(file, stat) {
+  const key = crypto.createHash('sha256').update(`${file}\0${stat.size}\0${stat.mtimeMs}`).digest('hex');
+  const output = path.join(AUDIO_CACHE, `${key}.m4a`);
+  if (fs.existsSync(output)) return key;
+  let job = audioConversionJobs.get(key);
+  if (!job) {
+    const temporary = path.join(AUDIO_CACHE, `${key}.${process.pid}.${crypto.randomUUID()}.tmp.m4a`);
+    const ffmpeg = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
+    job = runMediaTool(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-nostdin', '-y', '-i', file, '-map', '0:a:0', '-vn', '-c:a', 'aac', '-profile:a', 'aac_low', '-b:a', '192k', '-ac', '2', '-ar', '48000', '-movflags', '+faststart', temporary])
+      .then(() => fs.promises.rename(temporary, output))
+      .catch(error => { try { fs.unlinkSync(temporary); } catch {} throw error; })
+      .finally(() => audioConversionJobs.delete(key));
+    audioConversionJobs.set(key, job);
+  }
+  await job;
+  return key;
+}
+function streamMediaFile(req, res, file, contentType) {
+  const stat = fs.statSync(file), range = parseByteRange(req.headers.range, stat.size);
+  if (range === false) return res.writeHead(416, { 'Content-Range':`bytes */${stat.size}`, 'Accept-Ranges':'bytes' }).end();
+  const start = range?.start ?? 0, end = range?.end ?? stat.size - 1;
+  const headers = { 'Accept-Ranges':'bytes', 'Content-Length':range ? end - start + 1 : stat.size, 'Content-Type':contentType };
+  if (range) headers['Content-Range'] = `bytes ${start}-${end}/${stat.size}`;
+  res.writeHead(range ? 206 : 200, headers);
+  return fs.createReadStream(file, range ? { start, end } : undefined).pipe(res);
 }
 function videoPath(reference) { return path.isAbsolute(reference) ? path.resolve(reference) : path.join(VIDEOS, path.basename(reference)); }
 function storedVideoPath(reference) { return path.isAbsolute(reference) ? null : videoPath(reference); }
@@ -75,6 +126,33 @@ const server = http.createServer(async (req,res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     if (req.method === 'GET' && url.pathname === '/api/library') return json(res,200,decorate(readDb()));
+    if (url.pathname.startsWith('/api/audio-compat/')) {
+      if (!['GET', 'POST'].includes(req.method)) return res.writeHead(405).end();
+      const parts=url.pathname.split('/'), sid=decodeURIComponent(parts[3]||''), eid=decodeURIComponent(parts[4]||'');
+      const db=readDb(), show=db.shows.find(item=>item.id===sid), ep=show?.episodes.find(item=>item.id===eid);
+      if(!ep)return json(res,404,{error:'Episode not found'});
+      const file=videoPath(ep.video); if(!fs.existsSync(file))return json(res,404,{error:'Video file is missing'});
+      const stat=fs.statSync(file); let codec;
+      try { codec=await probeAudioCodec(file,stat); }
+      catch(error) { if(error.code==='ENOENT')return json(res,503,{error:'FFmpeg is needed to prepare audio for this browser.'}); console.error(error); return json(res,500,{error:'Could not inspect the audio track.'}); }
+      if(!codec)return json(res,200,{codec:null,hasAudio:false});
+      if(!audioCodecsNeedingAac.has(codec))return json(res,200,{codec,needsFallback:false});
+      if(req.method==='GET')return json(res,200,{codec,needsFallback:true});
+      try {
+        const key=await prepareCompatibleAudio(file,stat);
+        return json(res,200,{codec,url:`/compat-audio/${key}.m4a`});
+      } catch(error) {
+        if(error.code==='ENOENT')return json(res,503,{error:'FFmpeg is needed to prepare audio for this browser.'});
+        console.error(error);return json(res,500,{error:'Could not prepare browser-compatible audio.'});
+      }
+    }
+    if (req.method === 'GET' && url.pathname.startsWith('/compat-audio/')) {
+      const match=/^\/compat-audio\/([a-f0-9]{64})\.m4a$/i.exec(url.pathname);
+      if(!match)return res.writeHead(404).end();
+      const file=path.join(AUDIO_CACHE,`${match[1]}.m4a`);
+      if(!fs.existsSync(file))return res.writeHead(404).end();
+      return streamMediaFile(req,res,file,'audio/mp4');
+    }
     if (req.method === 'POST' && url.pathname === '/api/browse-folder') {
       if (process.platform !== 'win32') return json(res,501,{error:'The folder picker is available when Nebflix runs on Windows. You can paste a folder path instead.'});
       const folder = await browseForFolder();
@@ -145,14 +223,7 @@ const server = http.createServer(async (req,res) => {
     if (req.method === 'GET' && url.pathname.startsWith('/media/')) {
       const [, , sid, eid] = url.pathname.split('/'); const db=readDb(); const show=db.shows.find(s=>s.id===decodeURIComponent(sid)); const ep=show?.episodes.find(e=>e.id===decodeURIComponent(eid));
       if(!ep) return json(res,404,{error:'Episode not found'}); const file=videoPath(ep.video); if(!fs.existsSync(file))return json(res,404,{error:'Video file is missing'});
-      const stat=fs.statSync(file), range=parseByteRange(req.headers.range,stat.size);
-      if(range===false)return res.writeHead(416,{'Content-Range':`bytes */${stat.size}`,'Accept-Ranges':'bytes'}).end();
-      const start=range?.start??0,end=range?.end??stat.size-1;
-      const status=range?206:200;
-      const headers={'Accept-Ranges':'bytes','Content-Length':range?end-start+1:stat.size,'Content-Type':mime(file)};
-      if(range)headers['Content-Range']=`bytes ${start}-${end}/${stat.size}`;
-      res.writeHead(status,headers);
-      return fs.createReadStream(file,range?{start,end}:undefined).pipe(res);
+      return streamMediaFile(req,res,file,mime(file));
     }
     if (req.method === 'GET' && url.pathname.startsWith('/stills/')) { const file=path.join(STILLS,path.basename(url.pathname)); if(!fs.existsSync(file))return res.writeHead(404).end();res.writeHead(200,{'Content-Type':'image/jpeg','Cache-Control':'public, max-age=31536000, immutable'});return fs.createReadStream(file).pipe(res); }
     const requested=decodeURIComponent(url.pathname);
