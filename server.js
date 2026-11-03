@@ -136,8 +136,8 @@ const server = http.createServer(async (req,res) => {
       try { codec=await probeAudioCodec(file,stat); }
       catch(error) { if(error.code==='ENOENT')return json(res,503,{error:'FFmpeg is needed to prepare audio for this browser.'}); console.error(error); return json(res,500,{error:'Could not inspect the audio track.'}); }
       if(!codec)return json(res,200,{codec:null,hasAudio:false});
-      if(!audioCodecsNeedingAac.has(codec))return json(res,200,{codec,needsFallback:false});
-      if(req.method==='GET')return json(res,200,{codec,needsFallback:true});
+      if(!audioCodecsNeedingAac.has(codec))return json(res,200,{codec,hasAudio:true,needsFallback:false});
+      if(req.method==='GET')return json(res,200,{codec,hasAudio:true,needsFallback:true});
       try {
         const key=await prepareCompatibleAudio(file,stat);
         return json(res,200,{codec,url:`/compat-audio/${key}.m4a`});

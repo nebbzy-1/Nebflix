@@ -58,7 +58,7 @@ async function prepareCompatibleAudio(ep) {
     const probe = await probeResponse.json();
     if (generation !== audioBridgeGeneration || activeEpisode?.id !== ep.id) return;
     if (!probeResponse.ok) throw new Error(probe.error || 'Could not inspect the audio track.');
-    if (!probe.hasAudio) {
+    if (probe.hasAudio === false) {
       $('#playbackError').textContent = 'This video file has no audio track.';
       return;
     }
