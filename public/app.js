@@ -11,8 +11,44 @@ video.muted = localStorage.getItem('nebflix-muted') === 'true';
 video.addEventListener('volumechange', () => {
   localStorage.setItem('nebflix-volume', String(video.volume));
   localStorage.setItem('nebflix-muted', String(video.muted));
+  if (video.volume > 0) {
+    lastAudibleVolume = video.volume;
+    localStorage.setItem('nebflix-last-audible-volume', String(video.volume));
+  }
+  updateVolumeControls();
 });
 let activeEpisode = null, lastServerProgressSave = 0;
+let lastAudibleVolume = Number(localStorage.getItem('nebflix-last-audible-volume'));
+if (!Number.isFinite(lastAudibleVolume) || lastAudibleVolume <= 0 || lastAudibleVolume > 1) lastAudibleVolume = video.volume || 0.8;
+
+function updateVolumeControls() {
+  const isMuted = video.muted || video.volume === 0;
+  const toggle = $('#volumeToggle');
+  toggle.textContent = isMuted ? '◖×' : '◖))';
+  toggle.setAttribute('aria-label', isMuted ? 'Unmute audio' : 'Mute audio');
+  toggle.title = isMuted ? 'Unmute audio' : 'Mute audio';
+  $('#volumeSlider').value = String(video.volume);
+  $('#volumeLabel').textContent = `${Math.round(video.volume * 100)}%`;
+}
+function formatMediaTime(value) {
+  const seconds = Math.max(0, Math.floor(Number.isFinite(value) ? value : 0));
+  const minutes = Math.floor(seconds / 60);
+  const remainder = String(seconds % 60).padStart(2, '0');
+  return minutes >= 60
+    ? `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}:${remainder}`
+    : `${minutes}:${remainder}`;
+}
+function updatePlaybackControls() {
+  const playButton = $('#playToggle');
+  playButton.textContent = video.paused ? '▶' : 'Ⅱ';
+  playButton.setAttribute('aria-label', video.paused ? 'Play' : 'Pause');
+  playButton.title = video.paused ? 'Play' : 'Pause';
+  $('#currentTime').textContent = formatMediaTime(video.currentTime);
+  $('#durationTime').textContent = formatMediaTime(video.duration);
+  $('#seekSlider').value = Number.isFinite(video.duration) && video.duration > 0
+    ? String(Math.round(video.currentTime / video.duration * 1000))
+    : '0';
+}
 
 function saveProgress(){localStorage.setItem('nebflix-progress',JSON.stringify(progress));}
 function notify(message){const toast=$('#toast');toast.textContent=message;toast.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('show'),2600);}
@@ -201,6 +237,7 @@ async function openEpisode(ep) {
     const p = progress[ep.id];
     if (p?.duration && p.time > 5 && p.time < video.duration - 5) video.currentTime = p.time;
     else if (watchedPct(ep) >= 95) video.currentTime = 0;
+    updatePlaybackControls();
     persistEpisode(ep);
     video.play().catch(() => {});
     updateNav();
@@ -209,6 +246,7 @@ async function openEpisode(ep) {
     $('#playbackError').textContent = `This browser couldn't decode the video (media error ${video.error?.code || 'unknown'}).`;
   };
   video.ontimeupdate = () => {
+    updatePlaybackControls();
     if (video.duration && video.currentTime > 1) {
       const item = { time: video.currentTime, duration: video.duration, completed: false, updatedAt: Date.now() };
       progress[ep.id] = item;
@@ -347,6 +385,14 @@ $('#importGo').onclick=async()=>{const button=$('#importGo'),path=$('#folderPath
 $('#chooseFiles').onclick=()=>$('#filePicker').click();$('#filePicker').onchange=()=>{$('#selectedFiles').textContent=[...$('#filePicker').files].map(f=>f.name).join(' · ');};
 $('#uploadGo').onclick=async()=>{const files=[...$('#filePicker').files],name=$('#showName').value.trim()||'My uploads';$('#uploadError').textContent='';if(!files.length){$('#uploadError').textContent='Choose at least one video file first.';return;}const button=$('#uploadGo');button.disabled=true;try{for(let i=0;i<files.length;i++){const f=files[i];$('#uploadProgress').textContent=`Adding ${i+1} of ${files.length} · ${f.name}`;const r=await fetch(`/api/upload?show=${encodeURIComponent(name)}&name=${encodeURIComponent(f.name)}`,{method:'POST',headers:{'Content-Type':f.type||'application/octet-stream'},body:f});const data=await r.json();if(!r.ok)throw Error(data.error);library=data.library;}render();generateStills();closeModals();$('#filePicker').value='';$('#selectedFiles').textContent='';$('#uploadProgress').textContent='';notify(`${files.length} episode${files.length===1?'':'s'} added.`);}catch(e){$('#uploadError').textContent=e.message;}finally{button.disabled=false;}};
 $('#playerClose').onclick=closePlayer;$('#player').addEventListener('click',e=>{if(e.target===$('#player'))closePlayer();});$('#prevEp').onclick=()=>{if(activeIndex>0){activeIndex--;openEpisode(activeEpisodes[activeIndex]);}};$('#nextEp').onclick=()=>{if(activeIndex<activeEpisodes.length-1){activeIndex++;openEpisode(activeEpisodes[activeIndex]);}};$('#heroPrevious').onclick=()=>cycleHero(-1);$('#heroNext').onclick=()=>cycleHero(1);$('#heroPlay').onclick=()=>{const show=library.shows.find(item=>item.id===$('#heroPlay').dataset.showId);if(show)playShow(show);};
+$('#playToggle').onclick=()=>video.paused?video.play().catch(()=>{}):video.pause();
+$('#volumeSlider').addEventListener('input',()=>{const volume=Number($('#volumeSlider').value);video.volume=volume;video.muted=volume===0;});
+$('#volumeToggle').onclick=()=>{if(video.muted||video.volume===0){video.volume=lastAudibleVolume;video.muted=false;}else video.muted=true;};
+$('#seekSlider').addEventListener('input',()=>{if(Number.isFinite(video.duration)&&video.duration>0)video.currentTime=Number($('#seekSlider').value)/1000*video.duration;});
+$('#fullscreenToggle').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await $('.player-shell').requestFullscreen();}catch{$('#playbackError').textContent='Fullscreen is unavailable in this browser.';}};
+video.addEventListener('play',updatePlaybackControls);video.addEventListener('pause',updatePlaybackControls);video.addEventListener('loadedmetadata',updatePlaybackControls);
+document.addEventListener('fullscreenchange',()=>{const button=$('#fullscreenToggle'),isFullscreen=Boolean(document.fullscreenElement);button.setAttribute('aria-label',isFullscreen?'Exit fullscreen':'Enter fullscreen');button.title=isFullscreen?'Exit fullscreen':'Enter fullscreen';});
+updatePlaybackControls();updateVolumeControls();
 $('#search').oninput=render;$('#sort').onchange=render;$$('.filter').forEach(b=>b.onclick=()=>{$$('.filter').forEach(x=>x.classList.remove('active'));b.classList.add('active');filter=b.dataset.filter;render();});window.addEventListener('resize',()=>$$('.carousel').forEach(updateCarouselState));document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModals();if($('#player').classList.contains('open'))closePlayer();$('#addFab').classList.remove('open');}});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&activeEpisode)persistEpisode(activeEpisode,false,true);});window.addEventListener('pagehide',()=>{if(activeEpisode)persistEpisode(activeEpisode,false,true);});
 loadLibrary().catch(()=>notify('Nebflix could not connect to its local library.'));
