@@ -1,3 +1,44 @@
 .shelf h2 .row-delete{margin-left:auto;border:0;background:transparent;color:#999;font:500 10px var(--font);cursor:pointer;opacity:0;transition:opacity .15s}
 .shelf:hover h2 .row-delete,.shelf h2 .row-delete:focus{opacity:1}
 .shelf h2 .row-delete:hover{color:#fff}
+.folder-picker-row{display:flex;align-items:center;gap:8px}
+.folder-picker-row .path-input{flex:1;min-width:0}
+.browse-folder{height:41px;flex:none;padding:0 14px;font-size:11px}
+.show-modal{width:min(1000px,100%);max-height:90vh;overflow-y:auto}
+.show-detail-meta{margin:0 0 18px;color:#aaa;font-size:12px}
+.show-modal-actions{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:14px}
+.show-modal-actions .error-text{flex:1}
+.collection-row{display:flex;gap:12px;overflow-x:auto;overflow-y:hidden;padding:2px 2px 10px;scroll-snap-type:x proximity;scrollbar-width:thin;scrollbar-color:#444 transparent}
+.collection-row::-webkit-scrollbar{height:5px}
+.collection-row::-webkit-scrollbar-thumb{background:#444;border-radius:5px}
+.carousel{position:relative}
+.carousel-arrow{position:absolute;top:50%;z-index:3;display:none;place-items:center;width:38px;height:38px;padding:0;transform:translateY(-50%);border:1px solid #777;border-radius:50%;background:#151515eF;color:#fff;font:300 29px/1 var(--font);cursor:pointer;box-shadow:0 2px 10px #0008}
+.carousel.has-overflow .carousel-arrow{display:grid}
+.carousel-arrow.previous{left:5px}
+.carousel-arrow.next{right:5px}
+.carousel-arrow:disabled{opacity:.32;cursor:default}
+.hero-index{position:absolute;right:clamp(22px,4.3vw,84px);bottom:12%;z-index:3;display:flex;align-items:center;gap:11px;color:#eee;font-size:11px;letter-spacing:1px;text-shadow:0 1px 4px #000}
+.hero-index[hidden]{display:none}
+.hero-index button{display:grid;place-items:center;width:38px;height:38px;padding:0;border:1px solid #aaa;border-radius:50%;background:#151515c9;color:#fff;font:300 27px/1 var(--font);cursor:pointer}
+.hero-index button:hover{background:#333}
+.collection-card{display:block;flex:0 0 clamp(155px,16vw,210px);min-width:0;padding:0;border:0;background:transparent;color:inherit;text-align:left;font:inherit;cursor:pointer;scroll-snap-align:start;transition:transform .2s}
+.collection-card:hover{transform:scale(1.035)}
+.collection-art{position:relative;display:grid;place-items:center;aspect-ratio:2/3;overflow:hidden;border-radius:4px;background:radial-gradient(ellipse at 70% 37%,rgba(172,99,62,.34),transparent 42%),linear-gradient(140deg,#38312d,#161514 75%);box-shadow:0 3px 13px #0006}
+.collection-art>img{width:100%;height:100%;object-fit:cover}
+.collection-fallback{font:750 42px var(--font);letter-spacing:2px;color:#ded0bc99}
+.collection-count{position:absolute;inset:auto 0 0;padding:24px 10px 9px;background:linear-gradient(0deg,#000c,transparent);color:#eee;font-size:10px}
+.collection-copy{display:flex;flex-direction:column;gap:3px;padding:8px 2px 0}
+.collection-copy strong{overflow:hidden;color:#eee;font-size:12px;text-overflow:ellipsis;white-space:nowrap}
+.collection-copy>span{color:#aaa;font-size:10px}
+.episode-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;max-height:55vh;overflow-y:auto;padding:2px 6px 10px 2px}
+.episode-grid .episode-card{flex:none}
+@media(max-width:620px){.folder-picker-row{align-items:stretch}.browse-folder{padding:0 11px}.collection-card{flex-basis:42vw;max-width:190px}.carousel-arrow{width:32px;height:32px;font-size:25px}.hero-index{right:17px;bottom:26px;gap:7px}.hero-index button{width:33px;height:33px;font-size:23px}.episode-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}}
+.player-tools #enableAudio{height:29px;padding:0 10px;border:1px solid #777;border-radius:3px;background:#292929;color:#fff;font:500 10px var(--font);cursor:pointer}
+.player-tools #enableAudio:hover{background:#3b3b3b}
+.player-tools .playback-error{flex:1;min-width:0}
+.player-tools .volume-control{flex:none;gap:7px}
+.player-tools .volume-control button{width:34px;border:1px solid #484848;border-radius:3px;background:#202020;font-size:13px}
+.player-tools .volume-control button:hover,.player-tools .volume-control button:focus-visible{background:#353535;outline:1px solid #888}
+.player-tools #volumeSlider{accent-color:#ccc}
+.player-tools #volumeLabel{font-variant-numeric:tabular-nums}
+@media(max-width:620px){.player-tools{gap:10px}.player-tools .playback-error{flex-basis:100%}.player-tools .volume-control{margin-left:auto}}
